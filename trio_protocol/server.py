@@ -5,6 +5,13 @@ from .loop import Loop
 from .transport import Transport
 
 
+
+def get_socket(listener):
+    if hasattr(listener, 'transport_listener'):
+        listener = listener.transport_listener
+    return listener.socket
+
+
 class Server:
     """
     Emulates the interface of:
@@ -23,7 +30,7 @@ class Server:
 
     @property
     def sockets(self):
-        return [l.socket for l in self._listeners]
+        return [get_socket(l) for l in self._listeners]
 
 
 async def create_server(nursery, protocol_factory, host=None, port=None, sock=None, ssl=None):
@@ -35,7 +42,10 @@ async def create_server(nursery, protocol_factory, host=None, port=None, sock=No
         if sock:
             listeners = [trio.SocketListener(from_stdlib_socket(sock.sock))]
         else:
-            listeners = await trio.open_tcp_listeners(port, host=host)
+            if ssl:
+                listeners = await trio.open_ssl_over_tcp_listeners(port, ssl, host=host)
+            else:    
+                listeners = await trio.open_tcp_listeners(port, host=host)
 
         server = Server(listeners=listeners, nursery=nursery)
         task_status.started(server)
