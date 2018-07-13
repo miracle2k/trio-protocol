@@ -128,5 +128,6 @@ async def handle_connection(protocol_factory, stream):
     except Exception as e:
         await stream.aclose()
         protocol.connection_lost(exc=e)
+        raise
     finally:
         protocol.connection_lost(exc=None)  
