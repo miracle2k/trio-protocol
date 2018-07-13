@@ -1,27 +1,59 @@
 import trio
+from trio.socket import from_stdlib_socket
 import functools
 from .loop import Loop
 from .transport import Transport
 
 
-async def create_server(nursery, protocol_factory, host, port): 
+class Server:
+    """
+    Emulates the interface of:
+    https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.Server
+    """
+
+    def __init__(self, listeners, nursery):
+        self._listeners = listeners
+        self._nursery = nursery
+
+    def close(self):
+        # TODO: This will shutdown the server, but, apparently, not the server_listeners()
+        # task!
+        for l in self._listeners:
+            self._nursery.start_soon(l.aclose)
+
+    @property
+    def sockets(self):
+        return [l.socket for l in self._listeners]
+
+
+async def create_server(nursery, protocol_factory, host=None, port=None, sock=None, ssl=None):
     """Will start the server in the nursery.
 
     Returns when it is ready for connections.
-
-    TODO: Implement this part, cannot use serve_tcp()
-    TODO: Return a server object that can be used to stop everything
     """ 
     async def run_server(task_status=trio.TASK_STATUS_IGNORED):
-        task_status.started()
-        await trio.serve_tcp(functools.partial(handle_connection, nursery, protocol_factory), port)
+        if sock:
+            listeners = [trio.SocketListener(from_stdlib_socket(sock.sock))]
+        else:
+            listeners = await trio.open_tcp_listeners(port, host=host)
 
-    await nursery.start(run_server)
+        server = Server(listeners=listeners, nursery=nursery)
+        task_status.started(server)
+
+        await trio.serve_listeners(
+            functools.partial(handle_connection, protocol_factory),
+            listeners)
+
+    return await nursery.start(run_server)
 
 
-async def handle_connection(nursery, protocol_factory, stream):
-    loop = Loop(nursery)
-    protocol = protocol_factory(loop)
+async def run_server(protocol_factory, host, port):
+    async with trio.open_nursery() as nursery:
+        await create_server(nursery, protocol_factory, host, port)
+
+
+async def handle_connection(protocol_factory, stream):
+    protocol = protocol_factory()
     transport = Transport(stream)
 
     protocol.connection_made(transport)

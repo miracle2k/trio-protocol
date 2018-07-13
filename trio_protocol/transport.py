@@ -32,7 +32,8 @@ class Transport:
     def get_extra_info(self, key: str):
         if key == 'sockname':
             return ("", "")
-        return ""
+        if key == 'peername':
+            return ("", "")
 
     def close(self):
         """We are being asked to close the connection.
