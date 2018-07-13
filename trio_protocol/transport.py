@@ -2,6 +2,16 @@ import trio
 
 
 class Transport:
+    """In `asyncio` every protocol has access to transport. It can use that
+    transport to write data, and to interact with flow control, as well as
+    close the connection. `asyncio`  has background tasks that will handle 
+    the requested actions.
+
+    We do the same thing. This class implements the same interfae as an
+    `asyncio` transport. Protocols do not understand they are not running on
+    top of `asyncio`.
+    """
+
     def __init__(self, stream):
         self.stream = stream
 
