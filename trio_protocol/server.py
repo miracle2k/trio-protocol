@@ -110,9 +110,8 @@ async def handle_connection(protocol_factory, stream):
                 return
 
             # Write the data and reset.
-            await stream.send_all(transport.to_write)
-            transport.to_write = b''
-            transport.can_write_event.clear()
+            data = transport._get_and_clear_write_buffer()
+            await stream.send_all(data)
 
     try:
         async with trio.open_nursery() as nursery:

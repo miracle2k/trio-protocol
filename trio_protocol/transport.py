@@ -14,12 +14,21 @@ class Transport:
         self.to_write = b''
 
     def write(self, data):
+        if not data:
+            return
+
         self.to_write += data
-        self.can_write_event.set()                
+        self.can_write_event.set()
 
         # TODO
         # if too much buffer, call pause writing
         # when buffer consumed, call resume writing
+
+    def _get_and_clear_write_buffer(self):
+        data = self.to_write
+        self.to_write = b''
+        self.can_write_event.clear()
+        return data
 
     def pause_reading(self):
         # Protocol asks us to stop reading
