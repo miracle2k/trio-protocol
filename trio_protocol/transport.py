@@ -23,6 +23,11 @@ class Transport:
 
         self.to_write = b''
 
+    def is_closing(self):
+        if self.should_close:
+            return True
+        return False
+
     def write(self, data):
         if not data:
             return
