@@ -1,12 +1,11 @@
 # trio-protocol
 
+This implements the `asyncio.Transport` interface and foundational asyncio classes sucsh as `asyncio.Task` on top of [`trio`](https://github.com/python-trio/trio), to aid porting `asyncio` libraries. The idea is to allow `trio` to run an [`asyncio.Protocol`](https://docs.python.org/3/library/asyncio-protocol.html#protocols), making it possible for a single code base to run on both frameworks.
 
-This implements the `asyncio.Transport` interface and related helpers on top of [`trio`](https://github.com/python-trio/trio), to aid porting `asyncio` libraries. The idea is to allow `trio` to run an [`asyncio.Protocol`](https://docs.python.org/3/library/asyncio-protocol.html#protocols) with no, or few, changes. 
+It is **not a goal** of `trio-protocol` to let you run `asyncio` code on `trio` without any changes. If you need this, look at [`asyncio-trio`](https://github.com/python-trio/trio-asyncio).
 
-It is an experiment, but so far, promising.
 
 #### What is and is not currently supported
-
 
 This is an early version. You can use it to support some basic `asyncio` servers. However, it lacks:
 
@@ -14,6 +13,7 @@ This is an early version. You can use it to support some basic `asyncio` servers
 - A test suite.
 - Robust experience running it in production.
 - Likely, implementations for useful/necessary methods that asyncio code is using in the wild, and should be added.
+
 
 ## Usage
 
@@ -73,9 +73,10 @@ except KeyboardInterrupt:
 >>> Note: To test this server, you can use:
 >>> `python -c "import struct; print((b'%shello world' % struct.pack('<L', 12)).decode('ascii'))" | nc localhost 5566`
 
+
 ### What if the protocol needs access to the loop
 
-If the protocol uses the `asyncio` loop, for example to start background tasks, it will likely accept a `loop` argument. We have a fake loop class that can be used:
+If the protocol uses the `asyncio` loop, for example to start background tasks, you can use `trio_protocol.Loop` which is a loop-like class that supports some of the commonly used methods such as `call_later` or `create_task`. Most protocols are written to accept a `loop` argument, so you would do:
 
 ```python
 import functools
@@ -91,5 +92,6 @@ async def run_server():
 trio.run(run_server)
 ```
 
-Any background task will now we spawned in the nursery given to `Loop`.
+Background task the protocol want to spawn now run within the nursery given to `trio_protocol.Loop`.
 
+Note: It is strictly a requirement that the protocol class you want to run uses an explicit loop. Most `asyncio` interfaces are written in such a way that when an explicit loop is not passed, the current global loop will be used automatically. This won't work, because you would end up using the `asyncio` loop.
