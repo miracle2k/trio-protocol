@@ -102,11 +102,11 @@ async def handle_connection(protocol_factory, stream):
         """
         while True:
             # If we were paused, wait until we are unpaused.
-            if not transport.can_read:
-                await transport.can_read_event.wait()
+            if transport._reading_paused:
+                await transport._reading_resumed_event.wait()
 
             # Has close() been called? Read no more.
-            if transport.should_close:
+            if transport._should_close:
                 return
 
             # Read a chunk of data
@@ -131,10 +131,10 @@ async def handle_connection(protocol_factory, stream):
     async def write_proc():
         while True:
             # Wait for data to be available
-            await transport.can_write_event.wait()
+            await transport._can_write_event.wait()
 
             # If there is no data (and we are closed), end.
-            if not transport.to_write and transport.should_close:
+            if not transport._write_buffer and transport._should_close:
                 return
 
             # Write the data and reset.
@@ -148,7 +148,7 @@ async def handle_connection(protocol_factory, stream):
             nursery.start_soon(write_proc)
 
             # Wait until the connection is closed.
-            await transport.should_cancel_event.wait()
+            await transport._should_cancel_event.wait()
             
             # If a read proc is hanging on read, this will end it.
             await stream.aclose()

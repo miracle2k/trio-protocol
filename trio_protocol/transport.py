@@ -1,4 +1,72 @@
+"""See:
+
+https://github.com/python/cpython/blob/master/Lib/asyncio/transports.py
+"""
+
 import trio
+
+
+class FlowControlMixin:
+    """We could have, very reasonably, used the asyncio version of this, which 
+    we can import from asyncio.transports._FlowControlMixin. I chose to copy the
+    code here for a couple of reasons:
+
+    - It may well break in the future.
+
+    - It has a number of requirements on our subclass (such as the existance
+      of the self._protocol field), and it might be easier to have all this stuff
+      together in one place.
+
+    - It has some idiosyncrasies, such as hiding all exceptions and calling 
+      self._loop.call_exception_handler, which I am not sure we want to reproduce
+      in trio.
+    """
+
+    def __init__(self, transport):
+        self.transport = transport
+        self.protocol_paused = False
+        self.set_write_buffer_limits()
+
+    @property
+    def protocol(self):
+        return self.transport._protocol
+
+    def maybe_pause_protocol(self):
+        size = self.transport.get_write_buffer_size()
+        if size <= self._high_water:
+            return
+        if not self.protocol_paused:
+            self.protocol_paused = True
+            self.protocol.pause_writing()
+
+    def maybe_resume_protocol(self):
+        if (self.protocol_paused and
+                self.transport.get_write_buffer_size() <= self._low_water):
+            self.protocol_paused = False
+            self.protocol.resume_writing()
+
+    def get_write_buffer_limits(self):
+        return (self._low_water, self._high_water)
+
+    def _set_write_buffer_limits(self, high=None, low=None):
+        if high is None:
+            if low is None:
+                high = 64 * 1024
+            else:
+                high = 4 * low
+        if low is None:
+            low = high // 4
+
+        if not high >= low >= 0:
+            raise ValueError(
+                f'high ({high!r}) must be >= low ({low!r}) must be >= 0')
+
+        self._high_water = high
+        self._low_water = low
+
+    def set_write_buffer_limits(self, high=None, low=None):
+        self._set_write_buffer_limits(high=high, low=low)
+        self.maybe_pause_protocol()
 
 
 class Transport:
@@ -15,16 +83,17 @@ class Transport:
     def __init__(self, stream):
         self.stream = stream
 
-        self.should_close = False
-        self.can_read = True
-        self.can_read_event = None
-        self.can_write_event = trio.Event()
-        self.should_cancel_event = trio.Event()
+        self._should_close = False
+        self._reading_paused = False
+        self._reading_resumed_event = None
+        self._can_write_event = trio.Event()
+        self._should_cancel_event = trio.Event()
 
-        self.to_write = b''
+        self._write_buffer = b''
+        self._write_flow = FlowControlMixin(self)
 
     def is_closing(self):
-        if self.should_close:
+        if self._should_close:
             return True
         return False
 
@@ -32,26 +101,44 @@ class Transport:
         if not data:
             return
 
-        self.to_write += data
-        self.can_write_event.set()
-
-        # TODO
-        # if too much buffer, call pause writing
-        # when buffer consumed, call resume writing
+        self._write_buffer += data
+        self._can_write_event.set()
+        self._write_flow.maybe_pause_protocol()
 
     def _get_and_clear_write_buffer(self):
-        data = self.to_write
-        self.to_write = b''
-        self.can_write_event.clear()
+        data = self._write_buffer
+        self._write_buffer = b''
+        self._can_write_event.clear()
+        self._write_flow.maybe_resume_protocol()
         return data
 
+    def get_write_buffer_limits(self):
+        return self._write_flow.get_write_buffer_limits()
+
+    def set_write_buffer_limits(self, high=None, low=None):
+        self._write_flow.set_write_buffer_limits(high=high, low=low)
+
+    def get_write_buffer_size(self):
+        return len(self._write_buffer)
+
     def pause_reading(self):
-        # Protocol asks us to stop reading
-        self.can_read = False
-        self.can_read_event = trio.Event()
+        """Protocols can call this to tell us to stop reading data, if we are
+        reading too much and too fast.
+
+        We use an event and a flag to tell the background task to stop reading.
+        """
+        self._reading_paused = False
+        self._reading_resumed_event = trio.Event()
 
     def resume_reading(self):
-        self.can_read_event.set()
+        """Protocols can call this to tell us to continue reading data, after
+        previously having told us to stop.
+
+        If reading was paused, the background task will be waiting on an event.
+        Fullfill the event to signal to the task to continue.
+        """
+        if self._reading_resumed_event:
+            self._reading_resumed_event.set()
 
     def get_extra_info(self, key: str):
         if key == 'sockname':
@@ -60,12 +147,13 @@ class Transport:
             return ("", "")
 
     def close(self):
-        """We are being asked to close the connection.
+        """Protocols can call this to tell us to stop the connection.
         """
-        self.should_close = True
-        self.should_cancel_event.set()
+        self._should_close = True
+        self._should_cancel_event.set()
 
         # Make sure the read proc stops waiting
-        if self.can_read_event:
-            self.can_read_event.set()
-        self.can_write_event.set()
+        if self._reading_resumed_event:
+            self._reading_resumed_event.set()
+        self._can_write_event.set()
+  
