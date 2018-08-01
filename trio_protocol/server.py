@@ -33,10 +33,20 @@ class Server:
         return [get_socket(l) for l in self._listeners]
 
 
-async def create_server(nursery, protocol_factory, host=None, port=None, sock=None, ssl=None):
-    """Will start the server in the nursery.
+async def create_server(nursery, protocol_factory, host=None, port=None, sock=None, 
+                        ssl=None) -> Server:
+    """This will spawn a task in `nursery` that listens to connections on 
+    the given port or socket. For every incoming connection, a separate task
+    will be spawned, and the `asyncio.Protocol` returned by `protocol_factory`
+    will be used to manage the connection.
 
-    Returns when it is ready for connections.
+    The `create_server` function itself returns once the server is setup and
+    ready for connections.
+
+    This is the asyncio equivalent of `Loop.create_server` and
+    `Loop.create_unix_server`.
+
+    The return value is an instance of `Server`.
     """ 
     async def run_server(task_status=trio.TASK_STATUS_IGNORED):
         if sock:
@@ -63,6 +73,9 @@ async def run_server(protocol_factory, host, port):
 
 
 async def handle_connection(protocol_factory, stream):
+    """Called for a single, incoming connection to the server. If the
+    connection ends, so does this function.
+    """
     protocol = protocol_factory()
     transport = Transport(stream)
 

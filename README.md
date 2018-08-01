@@ -1,6 +1,6 @@
 # trio-protocol
 
-This implements the `asyncio.Transport` interface and foundational asyncio classes sucsh as `asyncio.Task` on top of [`trio`](https://github.com/python-trio/trio), to aid porting `asyncio` libraries. The idea is to allow `trio` to run an [`asyncio.Protocol`](https://docs.python.org/3/library/asyncio-protocol.html#protocols), making it possible for a single code base to run on both frameworks.
+This implements the `asyncio.Transport` interface and foundational asyncio classes such as `asyncio.Task` on top of [`trio`](https://github.com/python-trio/trio), to aid porting `asyncio` libraries. The idea is to allow `trio` to run an [`asyncio.Protocol`](https://docs.python.org/3/library/asyncio-protocol.html#protocols), making it possible for a single code base to run on both frameworks.
 
 It is **not a goal** of `trio-protocol` to let you run `asyncio` code on `trio` without any changes. If you need this, look at [`asyncio-trio`](https://github.com/python-trio/trio-asyncio).
 
