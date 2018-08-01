@@ -25,7 +25,7 @@ def get_packages(package):
 
 setup(
     name='trio-protocol',
-    version='0.1',
+    version='0.2',
     url='https://github.com/miracle2k/trio-protocol',
     license='BSD',
     description='Trio implementation of asyncio.Protocol',
