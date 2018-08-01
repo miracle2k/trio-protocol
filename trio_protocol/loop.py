@@ -14,6 +14,11 @@ class Loop:
     def __init__(self, nursery):
         self.nursery = nursery
 
+    def stop(self):
+        """Will cancel the cancel_scope of the nursery the loop is bound to.
+        """
+        self.nursery.cancel_scope.cancel()
+
     def call_later(self, seconds, async_func, *args) -> Task:
         """Call `async_func` after `seconds`. Returns a `asyncio.Task`
         like interface which allows to cancel the callback.
