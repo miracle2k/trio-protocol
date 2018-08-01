@@ -35,12 +35,9 @@ class Loop:
                 try:
                     if inspect.iscoroutine(async_func):
                         result = await async_func
-                        print(result)
                     else:
                         result = await async_func()
-                        print(result)
                 except Exception as e:
-                    print(e)
                     task_set_exception(task, e)
                     return
 
