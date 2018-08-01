@@ -18,15 +18,21 @@ class Server:
     https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.Server
     """
 
-    def __init__(self, listeners, nursery):
+    def __init__(self, listeners, nursery, cancel_scope):
         self._listeners = listeners
         self._nursery = nursery
+        self._cancel_scope = cancel_scope
+        self._closed = trio.Event()
 
     def close(self):
-        # TODO: This will shutdown the server, but, apparently, not the server_listeners()
-        # task!
-        for l in self._listeners:
-            self._nursery.start_soon(l.aclose)
+        """This causes the server to stop listening to new tasks.
+        """
+        self._cancel_scope.cancel()
+
+    async def wait_closed(self):
+        """This causes the server to stop listening to new tasks.
+        """
+        await self._closed.wait()
 
     @property
     def sockets(self):
@@ -57,12 +63,21 @@ async def create_server(nursery, protocol_factory, host=None, port=None, sock=No
             else:    
                 listeners = await trio.open_tcp_listeners(port, host=host)
 
-        server = Server(listeners=listeners, nursery=nursery)
-        task_status.started(server)
-
-        await trio.serve_listeners(
-            functools.partial(handle_connection, protocol_factory),
-            listeners)
+        # An outer nursery to run connection tasks in.
+        server = None
+        async with trio.open_nursery() as connection_nursery:
+            # We can cancel serve_listeners() via this scope, without cancelling
+            # the connection tasks.
+            with trio.open_cancel_scope() as cancel_scope:
+                server = Server(listeners=listeners, nursery=nursery, cancel_scope=cancel_scope)
+                task_status.started(server)
+                await trio.serve_listeners(
+                    functools.partial(handle_connection, protocol_factory),
+                    listeners,
+                    handler_nursery=connection_nursery
+                )
+        if server is not None:
+            server._closed.set()
 
     return await nursery.start(run_server)
 
