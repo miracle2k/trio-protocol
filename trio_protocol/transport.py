@@ -138,7 +138,7 @@ class Transport:
 
         We use an event and a flag to tell the background task to stop reading.
         """
-        self._reading_paused = False
+        self._reading_paused = True
         self._reading_resumed_event = trio.Event()
 
     def resume_reading(self):
@@ -148,6 +148,7 @@ class Transport:
         If reading was paused, the background task will be waiting on an event.
         Fullfill the event to signal to the task to continue.
         """
+        self._reading_paused = False
         if self._reading_resumed_event:
             self._reading_resumed_event.set()
 
