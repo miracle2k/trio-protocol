@@ -92,7 +92,7 @@ async def handle_connection(protocol_factory, stream):
     connection ends, so does this function.
     """
     protocol = protocol_factory()
-    transport = Transport(stream)
+    transport = Transport(stream, protocol)
 
     protocol.connection_made(transport)
 
@@ -115,7 +115,7 @@ async def handle_connection(protocol_factory, stream):
             # EOF? The client closed the connection
             if not data:
                 # Notify the protocol
-                protocol_did_close = protocol.eof_received()
+                protocol_did_close = transport._protocol.eof_received()
 
                 # if not protocol_did_close:
                 #     pass
@@ -126,7 +126,7 @@ async def handle_connection(protocol_factory, stream):
 
             # Fee data to the protocol
             else:
-                protocol.data_received(data)
+                transport._protocol.data_received(data)
 
     async def write_proc():
         while True:
@@ -155,7 +155,7 @@ async def handle_connection(protocol_factory, stream):
 
     except Exception as e:
         await stream.aclose()
-        protocol.connection_lost(exc=e)
+        transport._protocol.connection_lost(exc=e)
         raise
     finally:
-        protocol.connection_lost(exc=None)  
+        transport._protocol.connection_lost(exc=None)  

@@ -29,7 +29,7 @@ class FlowControlMixin:
 
     @property
     def protocol(self):
-        return self.transport._protocol
+        return self.transport._protocol 
 
     def maybe_pause_protocol(self):
         size = self.transport.get_write_buffer_size()
@@ -80,7 +80,10 @@ class Transport:
     top of `asyncio`.
     """
 
-    def __init__(self, stream):
+    # For a live transport implementation, look at `_SelectorTransport` in:
+    # https://github.com/python/cpython/blob/master/Lib/asyncio/selector_events.py
+
+    def __init__(self, stream, protocol):
         self.stream = stream
 
         self._should_close = False
@@ -91,6 +94,14 @@ class Transport:
 
         self._write_buffer = b''
         self._write_flow = FlowControlMixin(self)
+
+        self.set_protocol(protocol)
+
+    def set_protocol(self, protocol):
+        self._protocol = protocol
+
+    def get_protocol(self):
+        return self._protocol
 
     def is_closing(self):
         if self._should_close:
